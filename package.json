@@ -1,0 +1,19 @@
+{
+  "name": "@toptensoftware/irtx-node",
+  "description": "Node library for irtx",
+  "version": "1.0.0",
+  "main": "irtx.js",
+  "type": "module",
+  "contributors": [
+    {
+      "name": "Brad Robinson",
+      "email": "contact@toptensoftware.com"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/toptensoftware/irtx-node"
+  },
+  "author": "Topten Software",
+  "license": "MIT"
+}
