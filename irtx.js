@@ -1,6 +1,10 @@
 import dgram from "node:dgram";
 
 
+const commandSendIr = 1;
+const commandBleConnect = 2;
+const commandBleSendHid = 3;
+
 function hexToBits(hexCode, numBits) {
 
     if (!numBits)
@@ -105,7 +109,7 @@ let UDP_PORT = null;
 let sock = null;
 
 // Open irtx for transmit
-export function irtx_open(ipaddress, port = 4210)
+export function irtxOpen(ipaddress, port = 4210)
 {
     if (sock)
         throw new Error("Already open");
@@ -116,7 +120,7 @@ export function irtx_open(ipaddress, port = 4210)
 }
 
 // Close irtx device
-export function irtx_close()
+export function irtxClose()
 {
     if (sock)
     {
@@ -131,7 +135,7 @@ export function irtx_close()
 // opts.carrierFrequency (default 38000)
 // opts.protocol (default null) Used if data is not a timing data array.
 // opts.repeat (default false)
-export function irtx_send(data, opts)
+export function irtxIrSend(data, opts)
 {
     // Resolve options
     opts = Object.assign({
@@ -151,8 +155,7 @@ export function irtx_send(data, opts)
 
     // Build packet header
     const packet = Buffer.alloc(12 + (data.length - 1) * 2);
-    const command = 1;
-    packet.writeUInt16LE(command, 0);
+    packet.writeUInt16LE(commandSendIr, 0);
     packet.writeUInt16LE(opts.deviceIndex, 2);
     packet.writeUInt32LE(opts.carrierFrequency, 4);
     packet.writeUInt32LE(gap, 8);
@@ -174,5 +177,49 @@ export function irtx_send(data, opts)
     });
 }
 
+function sendPacket(pkt)
+{
+    if (Array.isArray(pkt))
+    {
+        pkt = Buffer.from(pkt);
+    }
+
+    console.log(pkt);
+
+    return new Promise((resolve, reject) =>
+    {
+        sock.send(pkt, UDP_PORT, ESP32_IP, (err) =>
+        {
+            if (err)
+                reject(err)
+            else 
+            {
+                console.log(`Sent ${pkt.length} bytes to ${ESP32_IP}:${UDP_PORT}`);
+                resolve();
+            }
+        });
+    });
+}
 
 
+
+// Connect to a BLE Device
+// slot - the device to connect (-1 to disconnect all)
+export function irtxBleConnect(slot)
+{
+    // 2 = BLE connect command
+    return sendPacket([commandBleConnect, 0, slot < 0 ? 255 : slot])
+}
+
+export function irtxBleSendHid(slot, reportId, reportData)
+{
+    // 3 = BLE
+    return sendPacket([commandBleSendHid, 0, slot, reportId, ...reportData]);
+}
+
+
+export const irtxHidReportId = {
+    keyboard: 1,
+    consumer: 2,
+    mouse: 3,
+}
