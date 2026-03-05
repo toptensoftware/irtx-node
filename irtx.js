@@ -1,5 +1,4 @@
 import dgram from "node:dgram";
-import { generateIrTiming } from "./irlib.js";
 
 const commandSendIr = 1;
 const commandBleConnect = 2;

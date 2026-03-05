@@ -21,7 +21,7 @@ function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 // Open device
 irtxOpen("10.1.1.187");
 
-// Send code (use irlib to generate timing data)
+// Send code (use @toptensoftware/irlib to generate timing data)
 await irtxIrSend([9000,2000,4000,2000, /** etc **/ ]);
 
 // Connect BLE slot 1
