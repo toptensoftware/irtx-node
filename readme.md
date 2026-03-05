@@ -1,6 +1,8 @@
 # irtx-node
 
-Node library for [irtx](https://github.com/toptensoftware/irtx)
+Node library for [irtx](https://github.com/toptensoftware/irtx).
+
+See also [@toptensoftware/irlib](https://github.com/toptensoftware/irlib) for helpers to generate and decode IR signals.
 
 ## Installation
 
@@ -11,8 +13,7 @@ npm install --save toptensoftware/irtx-node
 ## Usage
 
 ```js
-import { protocolNec, irtxOpen, irtxClose, irtxIrSend,
-         irtxBleConnect, irtxBleSendHid, irtxHidReportId } from "@toptensoftware/irtx-node";
+import { irtxOpen, irtxClose, irtxIrSend, irtxBleConnect, irtxBleSendHid, irtxHidReportId } from "@toptensoftware/irtx-node";
 
 function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
@@ -20,8 +21,8 @@ function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 // Open device
 irtxOpen("10.1.1.187");
 
-// Send code
-await irtxIrSend(0x12345678, { protocol: protocolNec, repeat: false });
+// Send code (use irlib to generate timing data)
+await irtxIrSend([9000,2000,4000,2000, /** etc **/ ]);
 
 // Connect BLE slot 1
 await irtxBleConnect(1);

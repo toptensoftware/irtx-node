@@ -1,5 +1,5 @@
 import { protocolNec, irtxOpen, irtxClose, irtxIrSend,
-         irtxBleConnect, irtxBleSendHid, irtxHidReportId } from "./irtx.js";
+         irtxBleConnect, irtxBleSendHid, irtxHidReportId } from "./index.js";
 
 function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
@@ -8,7 +8,7 @@ function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 irtxOpen("10.1.1.187");
 
 // Send code
-await irtxIrSend(0x12345678, { protocol: protocolNec, repeat: false });
+await irtxIrSend([9000,2000,4000,2000]);
 
 // Connect BLE slot 1
 await irtxBleConnect(1);
