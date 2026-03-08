@@ -5,10 +5,11 @@ function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
 
 // Open device
-irtxOpen("10.1.1.187");
+irtxOpen("my-irtx-blaster.lan");
 
-// Send code
+// Send codes
 await irtxIrSend([9000,2000,4000,2000]);
+await irtxIrSend("NEC:0x7e8154ab");
 
 // Connect BLE slot 1
 await irtxBleConnect(1);

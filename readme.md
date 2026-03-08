@@ -13,6 +13,12 @@ npm install --save toptensoftware/irtx-node
 ## Usage
 
 ```js
+function irtxOpen(address, port = 4210);
+```
+
+
+
+```js
 import { irtxOpen, irtxClose, irtxIrSend, irtxBleConnect, irtxBleSendHid, irtxHidReportId } from "@toptensoftware/irtx-node";
 
 function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
