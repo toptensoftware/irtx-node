@@ -1,4 +1,7 @@
 import dgram from "node:dgram";
+import os from "node:os";
+import dns from "node:dns/promises";
+import { EventEmitter } from "node:events";
 
 const commandSendIr = 1;
 const commandBleConnect = 2;
@@ -52,6 +55,36 @@ function writeU64LE(buf, value, offset)
     buf.writeUInt32LE(Number(big >> 32n),        offset + 4);
 }
 
+const ipv4Re = /^\d{1,3}(\.\d{1,3}){3}$/;
+
+/**
+ * Returns the most likely local-network IPv4 address for this machine.
+ * Prefers RFC-1918 private ranges (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
+ * over other addresses. Returns '127.0.0.1' if nothing better is found.
+ * @returns {string}
+ */
+/*
+function getLocalNetworkIp()
+{
+    const candidates = [];
+    for (const ifaces of Object.values(os.networkInterfaces()))
+    {
+        for (const iface of ifaces)
+        {
+            if (iface.family !== "IPv4" || iface.internal)
+                continue;
+            const [a, b] = iface.address.split('.').map(Number);
+            const isPrivate = a === 10 ||
+                              (a === 172 && b >= 16 && b <= 31) ||
+                              (a === 192 && b === 168);
+            candidates.push({ address: iface.address, isPrivate });
+        }
+    }
+    candidates.sort((a, b) => b.isPrivate - a.isPrivate);
+    return candidates[0]?.address ?? '127.0.0.1';
+}
+*/
+
 /**
  * BLE HID report ID constants.
  * @type {{ keyboard: 1, consumer: 2, mouse: 3 }}
@@ -60,6 +93,39 @@ export const irtxHidReportId = {
     keyboard: 1,
     consumer: 2,
     mouse: 3,
+}
+
+const VIRTUAL_IFACE_PATTERNS = [/vmware/i, /virtualbox/i, /vethernet/i, /vmnet/i, /vbox/i];
+const PREFERRED_IFACE_PATTERNS = [/^wi.?fi$/i, /^ethernet$/i, /^eth\d/i, /^en\d/i, /^wlan\d/i];
+
+let local_ip;
+function getLocalIp() 
+{
+    if (local_ip)
+        return local_ip;
+
+    const candidates = [];
+
+    for (const [name, iface] of Object.entries(os.networkInterfaces())) {
+        for (const addr of iface) {
+            if (addr.family !== 'IPv4' || addr.internal)
+                continue;
+
+            const isVirtual = VIRTUAL_IFACE_PATTERNS.some(p => p.test(name));
+            const isPreferred = PREFERRED_IFACE_PATTERNS.some(p => p.test(name));
+
+            candidates.push({ address: addr.address, isVirtual, isPreferred });
+        }
+    }
+
+    // Sort: preferred first, virtual last
+    candidates.sort((a, b) => {
+        if (a.isPreferred !== b.isPreferred) return a.isPreferred ? -1 : 1;
+        if (a.isVirtual !== b.isVirtual) return a.isVirtual ? 1 : -1;
+        return 0;
+    });
+
+    return local_ip = candidates[0]?.address ?? null;
 }
 
 /**
@@ -92,8 +158,10 @@ export const irtxHidReportId = {
  * const irtx = new IrtxDevice("192.168.1.100");
  * await irtx.irSend("NEC:0x20DF10EF");
  * irtx.close();
+ *
+ * @fires IrtxDevice#ircode
  */
-export class IrtxDevice
+export class IrtxDevice extends EventEmitter
 {
     /**
      * Opens a UDP connection to an irtx device.
@@ -102,9 +170,12 @@ export class IrtxDevice
      */
     constructor(ipaddress, port = 4210)
     {
+        super();
         this._ip = ipaddress;
         this._port = port;
         this._sock = dgram.createSocket("udp4");
+        this._listenSock = null;
+        this._dnsCache = new Map();
     }
 
     /**
@@ -113,10 +184,92 @@ export class IrtxDevice
      */
     close()
     {
+        this.stopListening();
         if (this._sock)
         {
             this._sock.close();
             this._sock = null;
+        }
+    }
+
+    /**
+     * Starts listening for incoming cmd 4 (IR code) UDP packets on the specified port.
+     * Emits an `'ircode'` event for each valid packet received.
+     *
+     * @fires IrtxDevice#ircode
+     * @param {number} [port=4210] - UDP port to listen on.
+     * @returns {Promise<void>} Resolves when the socket is bound and listening.
+     *
+     * @example
+     * irtx.on('ircode', ({ protocol, code, deviceIndex, repeat }) => {
+     *     console.log(`Received IR code: protocol=0x${protocol.toString(16)} code=0x${code.toString(16)}`);
+     * });
+     * await irtx.startListening();
+     */
+    startListening(port = 4210)
+    {
+        if (this._listenSock)
+            return Promise.resolve();
+
+        return new Promise((resolve, reject) =>
+        {
+            const sock = dgram.createSocket("udp4");
+
+            sock.on("error", (err) =>
+            {
+                this.emit("error", err);
+            });
+
+            sock.on("message", (msg, rinfo) =>
+            {
+                if (msg.length < 17)
+                    return;
+
+                const cmd = msg.readUInt16LE(0);
+                if (cmd !== commandSendIrCode)
+                    return;
+
+                const deviceIndex = msg.readUInt16LE(2);
+                const protocol    = msg.readUInt32LE(4);
+                const codeLo      = BigInt(msg.readUInt32LE(8));
+                const codeHi      = BigInt(msg.readUInt32LE(12));
+                const code        = (codeHi << 32n) | codeLo;
+                const repeat      = msg.readUInt8(16) !== 0;
+
+                /**
+                 * Fired when a cmd 4 (IR code) UDP packet is received.
+                 * @event IrtxDevice#ircode
+                 * @type {Object}
+                 * @property {number}  deviceIndex - IR device index from the packet.
+                 * @property {number}  protocol    - FourCC protocol identifier.
+                 * @property {bigint}  code        - 64-bit IR code value.
+                 * @property {boolean} repeat      - Whether this is a repeat frame.
+                 * @property {string}  remoteAddress - IP address of the sender.
+                 * @property {number}  remotePort    - UDP port of the sender.
+                 */
+                this.emit("ircode", { deviceIndex, protocol, code, repeat, remoteAddress: rinfo.address, remotePort: rinfo.port });
+            });
+
+            sock.bind(port, () =>
+            {
+                this._listenSock = sock;
+                resolve();
+            });
+
+            sock.once("error", reject);
+        });
+    }
+
+    /**
+     * Stops listening for incoming UDP packets and closes the listen socket.
+     * @returns {void}
+     */
+    stopListening()
+    {
+        if (this._listenSock)
+        {
+            this._listenSock.close();
+            this._listenSock = null;
         }
     }
 
@@ -235,28 +388,61 @@ export class IrtxDevice
     }
 
     /**
+     * Resolves a hostname or IP string to a dotted-decimal IPv4 address.
+     * Results are cached for the lifetime of the device instance.
+     * `"localhost"` resolves to the machine's local-network IP (not 127.0.0.1).
+     * @param {string} host
+     * @returns {Promise<string>}
+     */
+    async _resolveIp(host)
+    {
+        if (!host || host === '0.0.0.0')
+            return '0.0.0.0';
+
+        if (host === 'localhost')
+            return getLocalIp();
+
+        if (ipv4Re.test(host))
+            return host;
+
+        if (this._dnsCache.has(host))
+            return this._dnsCache.get(host);
+
+        const { address } = await dns.lookup(host, { family: 4 });
+        this._dnsCache.set(host, address);
+        return address;
+    }
+
+    /**
      * Uploads the IR routing table to the device. Each entry maps an incoming IR code
      * to an outgoing IR code sent to a target IP (or retransmitted locally).
+     *
+     * `dstIp` accepts a dotted-decimal IP address, a hostname (resolved via DNS and
+     * cached), or `"localhost"` (resolved to the machine's local-network IP).
+     *
      * @param {RoutingEntry[]} table - Array of routing entries.
      * @returns {Promise<void>}
      */
-    setRoutingTable(table)
+    async setRoutingTable(table)
     {
+        const resolvedIps = await Promise.all(table.map(r => this._resolveIp(r.dstIp ?? '0.0.0.0')));
+
         const ENTRY_SIZE = 28;
         const buf = Buffer.alloc(4 + table.length * ENTRY_SIZE);
         buf.writeUInt16LE(commandSetRoutingTable, 0);  // cmd
         buf.writeUInt16LE(table.length,           2);  // count
 
         let offset = 4;
-        for (const r of table)
+        for (let i = 0; i < table.length; i++)
         {
+            const r = table[i];
             const srcProtocol = typeof r.srcProtocol === "string" ? riff(r.srcProtocol) : r.srcProtocol;
             const dstProtocol = typeof r.dstProtocol === "string" ? riff(r.dstProtocol) : (r.dstProtocol ?? 0);
             buf.writeUInt32LE(srcProtocol,         offset);      offset += 4;
             writeU64LE(buf, r.srcCode, offset);                  offset += 8;
             buf.writeUInt32LE(dstProtocol,         offset);      offset += 4;
             writeU64LE(buf, r.dstCode ?? 0n, offset);            offset += 8;
-            writeIPv4(buf, r.dstIp ?? '0.0.0.0', offset);        offset += 4;
+            writeIPv4(buf, resolvedIps[i],         offset);      offset += 4;
         }
 
         return this.sendPacket(buf);

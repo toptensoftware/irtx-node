@@ -91,6 +91,68 @@ await irtx.setRoutingTable([
 ]);
 ```
 
+Notes:
+
+* the `setRoutingTable` function is async
+* the `dstIp` can be an ip v4 address in 'a.b.c.d' format
+* the `dstIp` can be 'localhost' an the library will enumerate available network interfaces
+  and pick the one that looks most likely to be the machine's IP on the local network.
+* the `dstIp` can be a host name that will be resolved (locally, not on the target device).
+
+
+### Receiving IR codes (UDP listener)
+
+The routing table can be configured to forward received IR codes to any UDP host, not just
+another irtx device. Use `startListening()` to receive those forwarded codes:
+
+```js
+const receiver = new IrtxDevice("192.168.1.100");
+
+receiver.on('ircode', ({ protocol, code, repeat, remoteAddress }) => {
+    console.log(`IR from ${remoteAddress}: proto=0x${protocol.toString(16)} code=0x${code.toString(16)} repeat=${repeat}`);
+});
+
+await receiver.startListening();    // optional arg: port (default 4210)
+
+// ... later ...
+receiver.stopListening();
+```
+
+`startListening()` binds a UDP socket on the specified port and emits an `'ircode'` event for
+each valid cmd 4 packet received. `stopListening()` closes that socket (it is also called
+automatically by `close()`).
+
+The `'ircode'` event payload:
+
+| Property | Type | Description |
+|---|---|---|
+| `protocol` | `number` | FourCC protocol identifier |
+| `code` | `bigint` | 64-bit IR code value |
+| `deviceIndex` | `number` | IR device index from the packet |
+| `repeat` | `boolean` | Whether this is a repeat frame |
+| `remoteAddress` | `string` | IP address of the sender |
+| `remotePort` | `number` | UDP port of the sender |
+
+To receive codes, configure the routing table on the sending device with the listener's IP
+as `dstIp`:
+
+```js
+const sender = new IrtxDevice("192.168.1.100");
+
+await sender.setRoutingTable([
+    {
+        srcProtocol: "NEC",
+        srcCode: 0x20DF10EFn,
+        dstProtocol: "NEC",
+        dstCode: 0x20DF10EFn,
+        dstIp: "192.168.1.50",     // IP of the listening host
+    },
+]);
+```
+
+
+
+
 ### Multiple devices
 
 Each `IrtxDevice` instance is independent, so multiple devices can be used simultaneously:
