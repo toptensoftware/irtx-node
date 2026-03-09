@@ -1,30 +1,29 @@
-import { protocolNec, irtxOpen, irtxClose, irtxIrSend,
-         irtxBleConnect, irtxBleSendHid, irtxHidReportId } from "./index.js";
+import { IrtxDevice, irtxHidReportId } from "./index.js";
 
 function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 
 
 // Open device
-irtxOpen("my-irtx-blaster.lan");
+const irtx = new IrtxDevice("my-irtx-blaster.lan");
 
 // Send codes
-await irtxIrSend([9000,2000,4000,2000]);
-await irtxIrSend("NEC:0x7e8154ab");
+await irtx.irSend([9000,2000,4000,2000]);
+await irtx.irSend("NEC:0x7e8154ab");
 
 // Connect BLE slot 1
-await irtxBleConnect(1);
+await irtx.bleConnect(1);
 await sleep(2000);  // allow time for device to connect. (TODO need to add a way to wait/check/poll this)
 
 // Send a consumer input report
-await irtxBleSendHid(1, irtxHidReportId.consumer, [0xE9, 0x00]);       // Press volume up
+await irtx.bleSendHid(1, irtxHidReportId.consumer, [0xE9, 0x00]);       // Press volume up
 await sleep(10);
-await irtxBleSendHid(1, irtxHidReportId.consumer, [0x00, 0x00]);       // Release
+await irtx.bleSendHid(1, irtxHidReportId.consumer, [0x00, 0x00]);       // Release
 
-//await irtxBleSendHid(1, irtxHidReportId.keyboard, [modifiers, 0, k1, k2, k3, k4, k5, k6]);
-//await irtxBleSendHid(1, irtxHidReportId.mouse, [buttons, dx, dy, wheel]);
+//await irtx.bleSendHid(1, irtxHidReportId.keyboard, [modifiers, 0, k1, k2, k3, k4, k5, k6]);
+//await irtx.bleSendHid(1, irtxHidReportId.mouse, [buttons, dx, dy, wheel]);
 
 // Disconnect BLE
-await irtxBleConnect(-1);
+await irtx.bleConnect(-1);
 
 // Close device
-irtxClose();
+irtx.close();
