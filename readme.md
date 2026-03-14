@@ -68,42 +68,18 @@ await irtx.bleSendHid(1, irtxHidReportId.mouse, [0, 10, 0, 0]);
 await irtx.bleConnect(-1);          // disconnect all
 ```
 
-### IR routing table
+### Switch activity
 
-Configure the device to forward received IR codes to another device:
+Switch the device to a different activity by zero-based index:
 
 ```js
-await irtx.setRoutingTable([
-    {
-        srcProtocol: "NEC",
-        srcCode: 0x20DF10EFn,
-        dstProtocol: "NEC",
-        dstCode: 0x20DF10EFn,
-        dstIp: "192.168.1.101",    // forward to another irtx device
-    },
-    {
-        srcProtocol: "NEC",
-        srcCode: 0x20DF20DFn,
-        dstProtocol: "NEC",
-        dstCode: 0x20DF20DFn,
-        dstIp: "0.0.0.0",         // retransmit locally
-    },
-]);
+await irtx.switchActivity(0);   // activate the first activity
+await irtx.switchActivity(2);   // activate the third activity
 ```
-
-Notes:
-
-* the `setRoutingTable` function is async
-* the `dstIp` can be an ip v4 address in 'a.b.c.d' format
-* the `dstIp` can be 'localhost' an the library will enumerate available network interfaces
-  and pick the one that looks most likely to be the machine's IP on the local network.
-* the `dstIp` can be a host name that will be resolved (locally, not on the target device).
-
 
 ### Receiving IR codes (UDP listener)
 
-The routing table can be configured to forward received IR codes to any UDP host, not just
-another irtx device. Use `startListening()` to receive those forwarded codes:
+Use `startListening()` to receive IR codes forwarded by the device:
 
 ```js
 const receiver = new IrtxDevice("192.168.1.100");
@@ -132,23 +108,6 @@ The `'ircode'` event payload:
 | `repeat` | `boolean` | Whether this is a repeat frame |
 | `remoteAddress` | `string` | IP address of the sender |
 | `remotePort` | `number` | UDP port of the sender |
-
-To receive codes, configure the routing table on the sending device with the listener's IP
-as `dstIp`:
-
-```js
-const sender = new IrtxDevice("192.168.1.100");
-
-await sender.setRoutingTable([
-    {
-        srcProtocol: "NEC",
-        srcCode: 0x20DF10EFn,
-        dstProtocol: "NEC",
-        dstCode: 0x20DF10EFn,
-        dstIp: "192.168.1.50",     // IP of the listening host
-    },
-]);
-```
 
 
 

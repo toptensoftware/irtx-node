@@ -12,8 +12,6 @@ import os      from 'os';
 const UDP_PORT = Number(process.argv[2]) || 4210;
 
 // ---- Get own IP address -------------------------------------------------------
-// Use this value in your routing table's dstIp so the irtx device forwards
-// matched IR codes here instead of (or in addition to) retransmitting via IR.
 
 function getOwnIp() {
     for (const iface of Object.values(os.networkInterfaces())) {
@@ -26,7 +24,7 @@ function getOwnIp() {
 }
 
 const MY_IP = getOwnIp();
-console.log(`Own IP (use this in your routing table dstIp): ${MY_IP}`);
+console.log(`Own IP: ${MY_IP}`);
 
 // ---- RIFF protocol ID helpers ------------------------------------------------
 

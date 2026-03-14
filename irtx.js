@@ -1,13 +1,11 @@
 import dgram from "node:dgram";
-import os from "node:os";
-import dns from "node:dns/promises";
 import { EventEmitter } from "node:events";
 
 const commandSendIr = 1;
 const commandBleConnect = 2;
 const commandBleSendHid = 3;
 const commandSendIrCode = 4;
-const commandSetRoutingTable = 5;
+const commandSwitchActivity = 5;
 
 /**
  * Encodes a 4-character ASCII string as a little-endian 32-bit RIFF FourCC integer.
@@ -31,20 +29,6 @@ export function riff(a)
 
 /**
  * @param {Buffer} buf
- * @param {string} ip
- * @param {number} offset
- */
-function writeIPv4(buf, ip, offset)
-{
-    const parts = ip.split('.');
-    buf[offset]     = parseInt(parts[0]);
-    buf[offset + 1] = parseInt(parts[1]);
-    buf[offset + 2] = parseInt(parts[2]);
-    buf[offset + 3] = parseInt(parts[3]);
-}
-
-/**
- * @param {Buffer} buf
  * @param {bigint | number} value
  * @param {number} offset
  */
@@ -55,36 +39,6 @@ function writeU64LE(buf, value, offset)
     buf.writeUInt32LE(Number(big >> 32n),        offset + 4);
 }
 
-const ipv4Re = /^\d{1,3}(\.\d{1,3}){3}$/;
-
-/**
- * Returns the most likely local-network IPv4 address for this machine.
- * Prefers RFC-1918 private ranges (192.168.x.x, 10.x.x.x, 172.16-31.x.x)
- * over other addresses. Returns '127.0.0.1' if nothing better is found.
- * @returns {string}
- */
-/*
-function getLocalNetworkIp()
-{
-    const candidates = [];
-    for (const ifaces of Object.values(os.networkInterfaces()))
-    {
-        for (const iface of ifaces)
-        {
-            if (iface.family !== "IPv4" || iface.internal)
-                continue;
-            const [a, b] = iface.address.split('.').map(Number);
-            const isPrivate = a === 10 ||
-                              (a === 172 && b >= 16 && b <= 31) ||
-                              (a === 192 && b === 168);
-            candidates.push({ address: iface.address, isPrivate });
-        }
-    }
-    candidates.sort((a, b) => b.isPrivate - a.isPrivate);
-    return candidates[0]?.address ?? '127.0.0.1';
-}
-*/
-
 /**
  * BLE HID report ID constants.
  * @type {{ keyboard: 1, consumer: 2, mouse: 3 }}
@@ -93,39 +47,6 @@ export const irtxHidReportId = {
     keyboard: 1,
     consumer: 2,
     mouse: 3,
-}
-
-const VIRTUAL_IFACE_PATTERNS = [/vmware/i, /virtualbox/i, /vethernet/i, /vmnet/i, /vbox/i];
-const PREFERRED_IFACE_PATTERNS = [/^wi.?fi$/i, /^ethernet$/i, /^eth\d/i, /^en\d/i, /^wlan\d/i];
-
-let local_ip;
-function getLocalIp() 
-{
-    if (local_ip)
-        return local_ip;
-
-    const candidates = [];
-
-    for (const [name, iface] of Object.entries(os.networkInterfaces())) {
-        for (const addr of iface) {
-            if (addr.family !== 'IPv4' || addr.internal)
-                continue;
-
-            const isVirtual = VIRTUAL_IFACE_PATTERNS.some(p => p.test(name));
-            const isPreferred = PREFERRED_IFACE_PATTERNS.some(p => p.test(name));
-
-            candidates.push({ address: addr.address, isVirtual, isPreferred });
-        }
-    }
-
-    // Sort: preferred first, virtual last
-    candidates.sort((a, b) => {
-        if (a.isPreferred !== b.isPreferred) return a.isPreferred ? -1 : 1;
-        if (a.isVirtual !== b.isVirtual) return a.isVirtual ? 1 : -1;
-        return 0;
-    });
-
-    return local_ip = candidates[0]?.address ?? null;
 }
 
 /**
@@ -140,15 +61,6 @@ function getLocalIp()
  * @property {string | number} protocol - Protocol name (e.g. `"NEC"`) or FourCC number.
  * @property {string | number | bigint} code - IR code value (hex string or number).
  * @property {boolean} [repeat=false] - Whether to send as a repeat frame.
- */
-
-/**
- * @typedef {Object} RoutingEntry
- * @property {string | number} srcProtocol - Source protocol name (e.g. `"NEC"`) or FourCC number.
- * @property {bigint | number} srcCode - Source IR code (64-bit).
- * @property {string | number} [dstProtocol=0] - Destination protocol name or FourCC number, or 0 to suppress retransmit.
- * @property {bigint | number} [dstCode=0n] - Destination IR code (64-bit).
- * @property {string} [dstIp='0.0.0.0'] - Destination IP, or `'0.0.0.0'` for local retransmit.
  */
 
 /**
@@ -175,7 +87,6 @@ export class IrtxDevice extends EventEmitter
         this._port = port;
         this._sock = dgram.createSocket("udp4");
         this._listenSock = null;
-        this._dnsCache = new Map();
     }
 
     /**
@@ -388,63 +299,16 @@ export class IrtxDevice extends EventEmitter
     }
 
     /**
-     * Resolves a hostname or IP string to a dotted-decimal IPv4 address.
-     * Results are cached for the lifetime of the device instance.
-     * `"localhost"` resolves to the machine's local-network IP (not 127.0.0.1).
-     * @param {string} host
-     * @returns {Promise<string>}
-     */
-    async _resolveIp(host)
-    {
-        if (!host || host === '0.0.0.0')
-            return '0.0.0.0';
-
-        if (host === 'localhost')
-            return getLocalIp();
-
-        if (ipv4Re.test(host))
-            return host;
-
-        if (this._dnsCache.has(host))
-            return this._dnsCache.get(host);
-
-        const { address } = await dns.lookup(host, { family: 4 });
-        this._dnsCache.set(host, address);
-        return address;
-    }
-
-    /**
-     * Uploads the IR routing table to the device. Each entry maps an incoming IR code
-     * to an outgoing IR code sent to a target IP (or retransmitted locally).
+     * Switches the active activity on the device by index.
      *
-     * `dstIp` accepts a dotted-decimal IP address, a hostname (resolved via DNS and
-     * cached), or `"localhost"` (resolved to the machine's local-network IP).
-     *
-     * @param {RoutingEntry[]} table - Array of routing entries.
+     * @param {number} index - Zero-based activity index to activate.
      * @returns {Promise<void>}
      */
-    async setRoutingTable(table)
+    switchActivity(index)
     {
-        const resolvedIps = await Promise.all(table.map(r => this._resolveIp(r.dstIp ?? '0.0.0.0')));
-
-        const ENTRY_SIZE = 28;
-        const buf = Buffer.alloc(4 + table.length * ENTRY_SIZE);
-        buf.writeUInt16LE(commandSetRoutingTable, 0);  // cmd
-        buf.writeUInt16LE(table.length,           2);  // count
-
-        let offset = 4;
-        for (let i = 0; i < table.length; i++)
-        {
-            const r = table[i];
-            const srcProtocol = typeof r.srcProtocol === "string" ? riff(r.srcProtocol) : r.srcProtocol;
-            const dstProtocol = typeof r.dstProtocol === "string" ? riff(r.dstProtocol) : (r.dstProtocol ?? 0);
-            buf.writeUInt32LE(srcProtocol,         offset);      offset += 4;
-            writeU64LE(buf, r.srcCode, offset);                  offset += 8;
-            buf.writeUInt32LE(dstProtocol,         offset);      offset += 4;
-            writeU64LE(buf, r.dstCode ?? 0n, offset);            offset += 8;
-            writeIPv4(buf, resolvedIps[i],         offset);      offset += 4;
-        }
-
+        const buf = Buffer.alloc(6);
+        buf.writeUInt16LE(commandSwitchActivity, 0);
+        buf.writeUInt32LE(index, 2);
         return this.sendPacket(buf);
     }
 
