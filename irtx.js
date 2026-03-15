@@ -6,6 +6,7 @@ const commandBleConnect = 2;
 const commandBleSendHid = 3;
 const commandSendIrCode = 4;
 const commandSwitchActivity = 5;
+const commandSimulateIr = 6;
 
 /**
  * Encodes a 4-character ASCII string as a little-endian 32-bit RIFF FourCC integer.
@@ -38,6 +39,17 @@ function writeU64LE(buf, value, offset)
     buf.writeUInt32LE(Number(big & 0xFFFFFFFFn), offset);
     buf.writeUInt32LE(Number(big >> 32n),        offset + 4);
 }
+
+/**
+ * Bitmask constants for the `eventKindMask` parameter of {@link IrtxDevice#simulateIr}.
+ * @type {{ Press: 1, Repeat: 2, LongPress: 4, Release: 8 }}
+ */
+export const IrEventKind = {
+    Press:     1,
+    Repeat:    2,
+    LongPress: 4,
+    Release:   8,
+};
 
 /**
  * BLE HID report ID constants.
@@ -309,6 +321,36 @@ export class IrtxDevice extends EventEmitter
         const buf = Buffer.alloc(6);
         buf.writeUInt16LE(commandSwitchActivity, 0);
         buf.writeUInt32LE(index, 2);
+        return this.sendPacket(buf);
+    }
+
+    /**
+     * Simulates receipt of an IR code on the device, for testing purposes.
+     *
+     * @param {string | number} protocol - Protocol name (e.g. `"NEC"`) or FourCC number.
+     * @param {string | number | bigint} code - IR code value.
+     * @param {number} [eventKindMask=0] - Bitmask of {@link IrEventKind} values to fire directly.
+     *   Pass `0` (default) to run through the normal edge-detection logic (synthesises Press/Repeat/Release).
+     * @returns {Promise<void>}
+     */
+    simulateIr(protocol, code, eventKindMask = 0)
+    {
+        if (typeof protocol === "string")
+            protocol = riff(protocol);
+
+        if (typeof code === "string")
+        {
+            if (!code.startsWith("0x") && !code.startsWith("0X"))
+                code = "0x" + code;
+            code = BigInt(code);
+        }
+
+        // [uint16 cmd=6][uint32 protocol][uint64 code][uint32 eventKindMask]
+        const buf = Buffer.alloc(18);
+        buf.writeUInt16LE(commandSimulateIr, 0);
+        buf.writeUInt32LE(protocol, 2);
+        writeU64LE(buf, code, 6);
+        buf.writeUInt32LE(eventKindMask, 14);
         return this.sendPacket(buf);
     }
 
