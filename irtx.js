@@ -63,7 +63,6 @@ export const irtxHidReportId = {
 
 /**
  * @typedef {Object} IrSendOpts
- * @property {number} [deviceIndex=0] - IR transmitter index on the device.
  * @property {number} [carrierFrequency=38000] - Carrier frequency in Hz (raw timing mode only).
  * @property {boolean} [repeat=false] - Whether to send as a repeat frame (protocol mode only).
  */
@@ -124,7 +123,7 @@ export class IrtxDevice extends EventEmitter
      * @returns {Promise<void>} Resolves when the socket is bound and listening.
      *
      * @example
-     * irtx.on('ircode', ({ protocol, code, deviceIndex, repeat }) => {
+     * irtx.on('ircode', ({ protocol, code, repeat }) => {
      *     console.log(`Received IR code: protocol=0x${protocol.toString(16)} code=0x${code.toString(16)}`);
      * });
      * await irtx.startListening();
@@ -152,7 +151,6 @@ export class IrtxDevice extends EventEmitter
                 if (cmd !== commandSendIrCode)
                     return;
 
-                const deviceIndex = msg.readUInt16LE(2);
                 const protocol    = msg.readUInt32LE(4);
                 const codeLo      = BigInt(msg.readUInt32LE(8));
                 const codeHi      = BigInt(msg.readUInt32LE(12));
@@ -163,14 +161,13 @@ export class IrtxDevice extends EventEmitter
                  * Fired when a cmd 4 (IR code) UDP packet is received.
                  * @event IrtxDevice#ircode
                  * @type {Object}
-                 * @property {number}  deviceIndex - IR device index from the packet.
                  * @property {number}  protocol    - FourCC protocol identifier.
                  * @property {bigint}  code        - 64-bit IR code value.
                  * @property {boolean} repeat      - Whether this is a repeat frame.
                  * @property {string}  remoteAddress - IP address of the sender.
                  * @property {number}  remotePort    - UDP port of the sender.
                  */
-                this.emit("ircode", { deviceIndex, protocol, code, repeat, remoteAddress: rinfo.address, remotePort: rinfo.port });
+                this.emit("ircode", { protocol, code, repeat, remoteAddress: rinfo.address, remotePort: rinfo.port });
             });
 
             sock.bind(port, () =>
@@ -241,7 +238,6 @@ export class IrtxDevice extends EventEmitter
     {
         // Resolve options
         opts = Object.assign({
-            deviceIndex: 0,
             carrierFrequency: 38000,
             repeat: false
         }, opts);
@@ -278,7 +274,7 @@ export class IrtxDevice extends EventEmitter
             // Setup packet
             const packet = Buffer.alloc(17);
             packet.writeUInt16LE(commandSendIrCode, 0);
-            packet.writeUInt16LE(data.deviceIndex ?? 0, 2);
+            packet.writeUInt16LE(0, 2);     // unused, used to be device index
             packet.writeUInt32LE(protocol, 4);
             writeU64LE(packet, code, 8);
             packet.writeUInt8(data.repeat ? 1 : 0, 16);
@@ -294,7 +290,7 @@ export class IrtxDevice extends EventEmitter
             // Build packet header
             const packet = Buffer.alloc(12 + (data.length - 1) * 2);
             packet.writeUInt16LE(commandSendIr, 0);
-            packet.writeUInt16LE(opts.deviceIndex, 2);
+            packet.writeUInt16LE(0, 2); // unused used to be device index
             packet.writeUInt32LE(opts.carrierFrequency, 4);
             packet.writeUInt32LE(gap, 8);
 

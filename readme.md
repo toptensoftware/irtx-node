@@ -44,7 +44,6 @@ Options (second argument, applies to all formats):
 
 | Option | Default | Description |
 |---|---|---|
-| `deviceIndex` | `0` | IR transmitter index on the device |
 | `carrierFrequency` | `38000` | Carrier frequency in Hz (raw timing mode only) |
 | `repeat` | `false` | Send as a repeat frame (protocol mode only) |
 
@@ -104,7 +103,6 @@ The `'ircode'` event payload:
 |---|---|---|
 | `protocol` | `number` | FourCC protocol identifier |
 | `code` | `bigint` | 64-bit IR code value |
-| `deviceIndex` | `number` | IR device index from the packet |
 | `repeat` | `boolean` | Whether this is a repeat frame |
 | `remoteAddress` | `string` | IP address of the sender |
 | `remotePort` | `number` | UDP port of the sender |
