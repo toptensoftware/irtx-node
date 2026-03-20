@@ -205,7 +205,7 @@ export class IrtxDevice extends EventEmitter
             pkt = Buffer.from(pkt);
         }
 
-        console.log(pkt);
+        //console.log(pkt);
 
         return new Promise((resolve, reject) =>
         {
@@ -215,7 +215,7 @@ export class IrtxDevice extends EventEmitter
                     reject(err)
                 else
                 {
-                    console.log(`Sent ${pkt.length} bytes to ${this._ip}:${this._port}`);
+                    //console.log(`Sent ${pkt.length} bytes to ${this._ip}:${this._port}`);
                     resolve();
                 }
             });
