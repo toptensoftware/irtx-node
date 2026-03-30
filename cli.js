@@ -131,14 +131,14 @@ async function configure(host, dataFile)
     const typeDefsSource = await typeDefsResponse.text();
 
     // Register a module hook so activities.js can use:
-    //   import { op, riff, opId, ... } from "irtx:binpack"
+    //   import { op, riff, opId, ... } from "binpack:types"
     register("./irtx-loader.js", {
         parentURL: import.meta.url,
         data: { source: typeDefsSource },
     });
 
     // Import type defs through the hook (also caches the module for activities.js)
-    const { default: typeDefs } = await import("irtx:binpack");
+    const { default: typeDefs } = await import("binpack:types");
 
     // Register types with binpack
     for (const def of typeDefs)
@@ -153,7 +153,7 @@ async function configure(host, dataFile)
     if (!rootType)
         throw new Error("No root type found in type definitions");
 
-    // Load and pack the data file (its "irtx:binpack" imports are served by the hook)
+    // Load and pack the data file (its "binpack:types" imports are served by the hook)
     const data = await loadFile(dataFile);
     const packResult = pack(rootType, data);
     const buffer = buildCombinedBuffer(packResult);

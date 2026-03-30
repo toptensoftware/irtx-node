@@ -1,5 +1,5 @@
 // Module loader hook — registered at runtime by the configure command.
-// Intercepts `import "irtx:binpack"` and serves the source fetched from the irtx repo,
+// Intercepts `import "binpack:types"` and serves the source fetched from the irtx repo,
 // so activities.js files can import helpers without any local install.
 
 let source = null;
@@ -9,13 +9,13 @@ export function initialize(data) {
 }
 
 export function resolve(specifier, context, nextResolve) {
-    if (specifier === "irtx:binpack")
-        return { shortCircuit: true, url: "irtx:binpack" };
+    if (specifier === "binpack:types")
+        return { shortCircuit: true, url: "binpack:types" };
     return nextResolve(specifier, context);
 }
 
 export function load(url, context, nextLoad) {
-    if (url === "irtx:binpack")
+    if (url === "binpack:types")
         return { shortCircuit: true, format: "module", source };
     return nextLoad(url, context);
 }
