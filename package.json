@@ -3,6 +3,9 @@
   "description": "Node library for irtx",
   "version": "1.0.4",
   "main": "irtx.js",
+  "bin": {
+    "irtx": "cli.js"
+  },
   "type": "module",
   "contributors": [
     {
@@ -15,5 +18,9 @@
     "url": "https://github.com/toptensoftware/irtx-node"
   },
   "author": "Topten Software",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@toptensoftware/binpack": "github:toptensoftware/binpack",
+    "@toptensoftware/clargs": "github:toptensoftware/clargs"
+  }
 }

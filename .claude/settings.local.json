@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(node cli.js --help)",
+      "Bash(node cli.js --version)",
+      "Bash(node -e \"import\\(''./cli.js''\\).then\\(m => console.log\\(Object.keys\\(m\\)\\)\\)\")",
+      "Bash(node -e \":*)"
+    ]
+  }
+}

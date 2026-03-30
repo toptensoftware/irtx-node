@@ -125,6 +125,99 @@ tv.close();
 amp.close();
 ```
 
+## Command Line Tool
+
+### Installation
+
+Install globally to use the `irtx` command anywhere:
+
+```bash
+npm install -g toptensoftware/irtx-node
+```
+
+Or run without installing via npx:
+
+```bash
+npx toptensoftware/irtx-node <command> [args]
+```
+
+### Specifying the device
+
+All commands that communicate with a device require a host address, either via
+the `--host` flag or the `IRTX_HOST` environment variable:
+
+```bash
+irtx --host 192.168.1.100 send NEC:0x20DF10EF
+IRTX_HOST=192.168.1.100 irtx send NEC:0x20DF10EF
+```
+
+The UDP port defaults to `4210` and can be overridden with `--port`.
+
+### `send`
+
+Sends an IR code to the device:
+
+```bash
+irtx --host <ip> send <PROTOCOL:CODE>
+```
+
+```bash
+irtx --host 192.168.1.100 send NEC:0x20DF10EF
+```
+
+### `configure`
+
+Packs an activities configuration file and uploads it to the device:
+
+```bash
+irtx --host <ip> configure <file.js|file.json>
+```
+
+If `--host` is omitted, the packed binary is written to `<file>.bin` in the
+same directory as the input file instead of being uploaded.
+
+```bash
+# Upload directly to device
+irtx --host 192.168.1.100 configure activities.js
+
+# Pack to activities.bin without uploading
+irtx configure activities.js
+```
+
+The configuration file is a `.js` or `.json` file that exports the activities
+data as its default export. `.js` files can import helpers from `irtx:binpack`:
+
+```js
+import { op, riff, opId, bindingType, irEventKindMask } from "irtx:binpack";
+
+export default {
+    version: 1,
+    devices: [
+        { name: "TV" },
+    ],
+    activities: [
+        {
+            name: "Watch TV",
+            devices: ["TV"],
+            bindings: [
+                {
+                    type: bindingType.ir,
+                    protocol: riff("NEC"),
+                    code: 0x20DF10EFn,
+                    eventKindMask: irEventKindMask.press,
+                    ops: [ op.sendIr("NEC:0x20DF10EF") ],
+                }
+            ]
+        }
+    ]
+};
+```
+
+The `irtx:binpack` specifier is provided at runtime by the CLI — no separate
+install is needed. The type definitions are fetched fresh from the
+[irtx](https://github.com/toptensoftware/irtx) repo each time `configure` runs,
+so the packed output always matches the current firmware schema.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
