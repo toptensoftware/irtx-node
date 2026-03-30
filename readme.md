@@ -185,10 +185,10 @@ irtx configure activities.js
 ```
 
 The configuration file is a `.js` or `.json` file that exports the activities
-data as its default export. `.js` files can import helpers from `irtx:binpack`:
+data as its default export. `.js` files can import helpers from `binpack:types`:
 
 ```js
-import { op, riff, opId, bindingType, irEventKindMask } from "irtx:binpack";
+import { op, riff, opId, bindingType, irEventKindMask } from "binpack:types";
 
 export default {
     version: 1,
@@ -213,7 +213,7 @@ export default {
 };
 ```
 
-The `irtx:binpack` specifier is provided at runtime by the CLI — no separate
+The `binpack:types` specifier is provided at runtime by the CLI — no separate
 install is needed. The type definitions are fetched fresh from the
 [irtx](https://github.com/toptensoftware/irtx) repo each time `configure` runs,
 so the packed output always matches the current firmware schema.
