@@ -23,6 +23,7 @@ function showHelp()
         "ble-connect <slot>":           "Connect BLE slot by index",
         "ble-disconnect":               "Disconnect all BLE slots",
         "ble-hid <reportId> <data>":    "Send BLE HID report (reportId: 1=keyboard 2=consumer 3=mouse, data: hex digits, optional commas)",
+        "ble-type <text>":              "Type an ASCII string as BLE HID keystrokes (US keyboard layout)",
     });
     console.log("\nOptions:");
     showArgs({
@@ -208,10 +209,125 @@ switch (command)
         break;
     }
 
+    case "ble-type":
+    {
+        if (!host)
+        {
+            console.error("Error: --host is required (or set the IRTX_HOST environment variable)");
+            process.exit(1);
+        }
+        if (commandArgs.length === 0)
+        {
+            console.error("Usage: irtx ble-type <text>");
+            process.exit(1);
+        }
+        await bleType(host, port, commandArgs.join(" "));
+        break;
+    }
+
     default:
         console.error(`Unknown command: ${command}`);
         process.exit(1);
 }
+
+// ---------------------------------------------------------------------------
+// BLE HID keyboard typing
+// ---------------------------------------------------------------------------
+
+const SHIFT = 0x02;
+
+function buildUsKeymap()
+{
+    const map = {};
+
+    // Letters a-z / A-Z  (HID keycodes 0x04–0x1D)
+    for (let i = 0; i < 26; i++)
+    {
+        const kc = 0x04 + i;
+        map[String.fromCharCode(0x61 + i)] = [0,     kc]; // a-z
+        map[String.fromCharCode(0x41 + i)] = [SHIFT, kc]; // A-Z
+    }
+
+    // Digit row: base character, shifted character, keycode
+    for (const [base, shifted, kc] of [
+        ['1', '!', 0x1E],
+        ['2', '@', 0x1F],
+        ['3', '#', 0x20],
+        ['4', '$', 0x21],
+        ['5', '%', 0x22],
+        ['6', '^', 0x23],
+        ['7', '&', 0x24],
+        ['8', '*', 0x25],
+        ['9', '(', 0x26],
+        ['0', ')', 0x27],
+    ])
+    {
+        map[base]    = [0,     kc];
+        map[shifted] = [SHIFT, kc];
+    }
+
+    // Punctuation and whitespace
+    for (const [base, shifted, kc] of [
+        [' ',  null, 0x2C],
+        ['\n', null, 0x28],
+        ['\t', null, 0x2B],
+        ['-',  '_',  0x2D],
+        ['=',  '+',  0x2E],
+        ['[',  '{',  0x2F],
+        [']',  '}',  0x30],
+        ['\\', '|',  0x31],
+        [';',  ':',  0x33],
+        ["'",  '"',  0x34],
+        ['`',  '~',  0x35],
+        [',',  '<',  0x36],
+        ['.',  '>',  0x37],
+        ['/',  '?',  0x38],
+    ])
+    {
+        map[base] = [0, kc];
+        if (shifted !== null)
+            map[shifted] = [SHIFT, kc];
+    }
+
+    return map;
+}
+
+const usKeymap = buildUsKeymap();
+
+async function bleType(host, port, text)
+{
+    const device = new IrtxDevice(host, port);
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    try
+    {
+        for (const ch of text)
+        {
+            const mapping = usKeymap[ch];
+            if (!mapping)
+            {
+                console.warn(`Warning: no keymap entry for ${JSON.stringify(ch)}, skipping`);
+                continue;
+            }
+
+            const [modifier, keycode] = mapping;
+
+            // Key press: [modifier, reserved, keycode, 0, 0, 0, 0, 0]
+            await device.bleSendHid(0xFF, 1, [modifier, 0x00, keycode, 0, 0, 0, 0, 0]);
+            await sleep(20);
+
+            // Key release
+            await device.bleSendHid(0xFF, 1, [0, 0, 0, 0, 0, 0, 0, 0]);
+            await sleep(30);
+        }
+    }
+    finally
+    {
+        device.close();
+    }
+}
+
+// ---------------------------------------------------------------------------
 
 async function configure(host, dataFile)
 {
