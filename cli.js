@@ -191,6 +191,11 @@ switch (command)
         const packets = [];
         for (let i = 1; i < commandArgs.length; i++)
         {
+            if (commandArgs[i] === "-")
+            {
+                packets.push(null);
+                continue;
+            }
             const hexStr = commandArgs[i].replace(/,/g, "");
             if (!/^[0-9a-fA-F]*$/.test(hexStr) || hexStr.length % 2 !== 0)
             {
@@ -210,7 +215,8 @@ switch (command)
             {
                 if (i > 0)
                     await sleep(30);
-                await device.bleSendHid(0xFF, reportId, packets[i]);
+                if (packets[i] !== null)
+                    await device.bleSendHid(0xFF, reportId, packets[i]);
             }
         }
         finally
