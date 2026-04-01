@@ -153,6 +153,8 @@ IRTX_HOST=192.168.1.100 irtx send NEC:0x20DF10EF
 
 The UDP port defaults to `4210` and can be overridden with `--port`.
 
+The `--delay <ms>` option sets the inter-packet delay for `ble-hid` and `ble-keys` (default: 30ms).
+
 ### `send`
 
 Sends an IR code to the device:
@@ -217,6 +219,93 @@ The `binpack:types` specifier is provided at runtime by the CLI — no separate
 install is needed. The type definitions are fetched fresh from the
 [irtx](https://github.com/toptensoftware/irtx) repo each time `configure` runs,
 so the packed output always matches the current firmware schema.
+
+### `ble-connect`
+
+Connects a BLE slot by index:
+
+```bash
+irtx --host <ip> ble-connect <slot>
+```
+
+### `ble-disconnect`
+
+Disconnects all BLE slots:
+
+```bash
+irtx --host <ip> ble-disconnect
+```
+
+### `ble-hid`
+
+Sends one or more raw BLE HID reports. Each argument after the report ID is a
+separate packet sent with a 30ms delay between them. Use `-` as an argument to
+introduce a delay without sending a packet.
+
+```bash
+irtx --host <ip> ble-hid <reportId> <hexdata> [<hexdata> ...]
+```
+
+Report IDs: `1` = keyboard, `2` = consumer, `3` = mouse.
+
+Hex data is a string of hex digits with optional commas (e.g. `0102FF` or `01,02,FF`).
+
+```bash
+# Consumer report: volume up press then release
+irtx --host 192.168.1.100 ble-hid 2 E900 0000
+
+# Extra delay between press and release
+irtx --host 192.168.1.100 ble-hid 2 E900 - 0000
+
+# Override inter-packet delay to 100ms
+irtx --host 192.168.1.100 --delay 100 ble-hid 2 E900 0000
+```
+
+### `ble-type`
+
+Types an ASCII string as BLE HID keyboard keystrokes (US 101 keyboard layout).
+Each character is sent as a key-press/key-release pair with a short inter-keystroke delay.
+
+```bash
+irtx --host <ip> ble-type <text>
+```
+
+```bash
+irtx --host 192.168.1.100 ble-type "hello world"
+```
+
+### `ble-keys`
+
+Sends a sequence of named key events as BLE HID keyboard reports. Prefix a key
+name with `!` to release it. The state of all held keys and modifiers is tracked
+across the sequence, and any keys still held at the end are automatically released.
+
+```bash
+irtx --host <ip> ble-keys <key> [<key> ...]
+```
+
+```bash
+# Press Ctrl+C then release both
+irtx --host 192.168.1.100 ble-keys ctrl c !c !ctrl
+
+# Press Ctrl+Alt+Delete
+irtx --host 192.168.1.100 ble-keys ctrl alt delete
+
+# Override inter-key delay to 50ms
+irtx --host 192.168.1.100 --delay 50 ble-keys shift f10
+```
+
+Available modifier keys: `ctrl` `lctrl` `shift` `lshift` `alt` `lalt` `gui` `win` `cmd`
+`lgui` `lwin` `rctrl` `rshift` `ralt` `altgr` `rgui` `rwin`
+
+Regular keys: `a`–`z`, `0`–`9`, `f1`–`f12`, `enter`/`return`, `esc`/`escape`,
+`backspace`/`bksp`, `tab`, `space`, `insert`/`ins`, `delete`/`del`, `home`, `end`,
+`pageup`/`pgup`, `pagedown`/`pgdn`, `up`, `down`, `left`, `right`, `capslock`,
+`scrolllock`, `numlock`, `printscreen`/`prtscr`, `pause`, `minus`, `equals`,
+`lbracket`, `rbracket`, `backslash`, `semicolon`, `apostrophe`, `grave`, `comma`,
+`period`, `slash`, `app`/`menu`
+
+Run `irtx --list-keys` to print the full list.
 
 ## License
 
