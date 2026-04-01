@@ -22,7 +22,7 @@ function showHelp()
         "configure <file>":             "Pack a .js or .json activities config file and upload to device (or write .bin if no --host)",
         "ble-connect <slot>":           "Connect BLE slot by index",
         "ble-disconnect":               "Disconnect all BLE slots",
-        "ble-hid <reportId> <data>":    "Send BLE HID report (reportId: 1=keyboard 2=consumer 3=mouse, data: hex digits, optional commas)",
+        "ble-hid <reportId> <data...>":  "Send one or more BLE HID reports (reportId: 1=keyboard 2=consumer 3=mouse, data: hex digits, optional commas)",
         "ble-type <text>":              "Type an ASCII string as BLE HID keystrokes (US keyboard layout)",
     });
     console.log("\nOptions:");
@@ -179,7 +179,7 @@ switch (command)
         }
         if (commandArgs.length < 2)
         {
-            console.error("Usage: irtx ble-hid <reportId> <hexdata>");
+            console.error("Usage: irtx ble-hid <reportId> <hexdata> [<hexdata> ...]");
             process.exit(1);
         }
         const reportId = parseInt(commandArgs[0], 10);
@@ -188,19 +188,30 @@ switch (command)
             console.error("Error: reportId must be an integer between 1 and 255");
             process.exit(1);
         }
-        const hexStr = commandArgs[1].replace(/,/g, "");
-        if (!/^[0-9a-fA-F]*$/.test(hexStr) || hexStr.length % 2 !== 0)
+        const packets = [];
+        for (let i = 1; i < commandArgs.length; i++)
         {
-            console.error("Error: hex data must be an even number of hex digits (optional commas allowed)");
-            process.exit(1);
+            const hexStr = commandArgs[i].replace(/,/g, "");
+            if (!/^[0-9a-fA-F]*$/.test(hexStr) || hexStr.length % 2 !== 0)
+            {
+                console.error(`Error: hex data must be an even number of hex digits (optional commas allowed): ${commandArgs[i]}`);
+                process.exit(1);
+            }
+            const reportData = [];
+            for (let j = 0; j < hexStr.length; j += 2)
+                reportData.push(parseInt(hexStr.slice(j, j + 2), 16));
+            packets.push(reportData);
         }
-        const reportData = [];
-        for (let i = 0; i < hexStr.length; i += 2)
-            reportData.push(parseInt(hexStr.slice(i, i + 2), 16));
         const device = new IrtxDevice(host, port);
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms));
         try
         {
-            await device.bleSendHid(0xFF, reportId, reportData);
+            for (let i = 0; i < packets.length; i++)
+            {
+                if (i > 0)
+                    await sleep(30);
+                await device.bleSendHid(0xFF, reportId, packets[i]);
+            }
         }
         finally
         {
