@@ -29,6 +29,7 @@ function showHelp()
     showArgs({
         "--host, -h <ip>":    "IP address or hostname of the irtx device (or set IRTX_HOST)",
         "--port, -p <port>":  "UDP port number for send command (default: 4210)",
+        "--delay <ms>":       "Inter-packet delay for ble-hid (default: 30)",
         "--help":             "Show this help",
         "--version":          "Show version information",
     });
@@ -36,6 +37,7 @@ function showHelp()
 
 let host = process.env.IRTX_HOST ?? null;
 let port = 4210;
+let delay = 30;
 let command = null;
 let commandArgs = [];
 
@@ -63,6 +65,10 @@ while (args.next())
         case "p":
         case "port":
             port = args.readIntValue();
+            break;
+
+        case "delay":
+            delay = args.readIntValue();
             break;
 
         case null:
@@ -214,7 +220,7 @@ switch (command)
             for (let i = 0; i < packets.length; i++)
             {
                 if (i > 0)
-                    await sleep(30);
+                    await sleep(delay);
                 if (packets[i] !== null)
                     await device.bleSendHid(0xFF, reportId, packets[i]);
             }
