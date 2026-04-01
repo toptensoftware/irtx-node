@@ -204,7 +204,7 @@ switch (command)
         const packets = [];
         for (let i = 1; i < commandArgs.length; i++)
         {
-            if (commandArgs[i] === "-")
+            if (commandArgs[i] === "!")
             {
                 packets.push(null);
                 continue;
