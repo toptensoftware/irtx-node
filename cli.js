@@ -24,12 +24,14 @@ function showHelp()
         "ble-disconnect":               "Disconnect all BLE slots",
         "ble-hid <reportId> <data...>":  "Send one or more BLE HID reports (reportId: 1=keyboard 2=consumer 3=mouse, data: hex digits, optional commas)",
         "ble-type <text>":              "Type an ASCII string as BLE HID keystrokes (US keyboard layout)",
+        "ble-keys <key...>":            "Send BLE HID key events (!key = release, e.g: ctrl c !c !ctrl)",
     });
     console.log("\nOptions:");
     showArgs({
         "--host, -h <ip>":    "IP address or hostname of the irtx device (or set IRTX_HOST)",
         "--port, -p <port>":  "UDP port number for send command (default: 4210)",
-        "--delay <ms>":       "Inter-packet delay for ble-hid (default: 30)",
+        "--delay <ms>":       "Inter-packet delay for ble-hid/ble-keys (default: 30)",
+        "--list-keys":        "List available key names for ble-keys",
         "--help":             "Show this help",
         "--version":          "Show version information",
     });
@@ -69,6 +71,11 @@ while (args.next())
 
         case "delay":
             delay = args.readIntValue();
+            break;
+
+        case "list-keys":
+            listKeys();
+            process.exit(0);
             break;
 
         case null:
@@ -248,6 +255,22 @@ switch (command)
         break;
     }
 
+    case "ble-keys":
+    {
+        if (!host)
+        {
+            console.error("Error: --host is required (or set the IRTX_HOST environment variable)");
+            process.exit(1);
+        }
+        if (commandArgs.length === 0)
+        {
+            console.error("Usage: irtx ble-keys <key...>  (prefix ! to release, e.g: ctrl c !c !ctrl)");
+            process.exit(1);
+        }
+        await bleKeys(host, port, commandArgs, delay);
+        break;
+    }
+
     default:
         console.error(`Unknown command: ${command}`);
         process.exit(1);
@@ -342,6 +365,162 @@ async function bleType(host, port, text)
             // Key release
             await device.bleSendHid(0xFF, 1, [0, 0, 0, 0, 0, 0, 0, 0]);
             await sleep(30);
+        }
+    }
+    finally
+    {
+        device.close();
+    }
+}
+
+// ---------------------------------------------------------------------------
+// BLE HID key names
+// ---------------------------------------------------------------------------
+
+// Modifier key name -> bitmask
+const modifierBits = {
+    ctrl:   0x01, lctrl:  0x01,
+    shift:  0x02, lshift: 0x02,
+    alt:    0x04, lalt:   0x04,
+    gui:    0x08, win:    0x08, cmd:   0x08, lgui: 0x08, lwin: 0x08,
+    rctrl:  0x10,
+    rshift: 0x20,
+    ralt:   0x40, altgr:  0x40,
+    rgui:   0x80, rwin:   0x80,
+};
+
+// Regular key name -> HID keycode
+const keyNames = {
+    // Letters
+    a: 0x04, b: 0x05, c: 0x06, d: 0x07, e: 0x08, f: 0x09, g: 0x0A,
+    h: 0x0B, i: 0x0C, j: 0x0D, k: 0x0E, l: 0x0F, m: 0x10, n: 0x11,
+    o: 0x12, p: 0x13, q: 0x14, r: 0x15, s: 0x16, t: 0x17, u: 0x18,
+    v: 0x19, w: 0x1A, x: 0x1B, y: 0x1C, z: 0x1D,
+    // Digits
+    '1': 0x1E, '2': 0x1F, '3': 0x20, '4': 0x21, '5': 0x22,
+    '6': 0x23, '7': 0x24, '8': 0x25, '9': 0x26, '0': 0x27,
+    // Whitespace / editing
+    enter: 0x28, return: 0x28,
+    esc: 0x29, escape: 0x29,
+    backspace: 0x2A, bksp: 0x2A,
+    tab: 0x2B,
+    space: 0x2C,
+    // Punctuation (unshifted names)
+    minus: 0x2D, equals: 0x2E,
+    lbracket: 0x2F, rbracket: 0x30,
+    backslash: 0x31, semicolon: 0x33,
+    apostrophe: 0x34, grave: 0x35,
+    comma: 0x36, period: 0x37, slash: 0x38,
+    // Lock / system
+    capslock: 0x39, scrolllock: 0x47, numlock: 0x53,
+    printscreen: 0x46, prtscr: 0x46,
+    pause: 0x48,
+    // Navigation
+    insert: 0x49, ins: 0x49,
+    home: 0x4A,
+    pageup: 0x4B, pgup: 0x4B,
+    delete: 0x4C, del: 0x4C,
+    end: 0x4D,
+    pagedown: 0x4E, pgdn: 0x4E,
+    right: 0x4F, left: 0x50, down: 0x51, up: 0x52,
+    // Function keys
+    f1:  0x3A, f2:  0x3B, f3:  0x3C, f4:  0x3D,
+    f5:  0x3E, f6:  0x3F, f7:  0x40, f8:  0x41,
+    f9:  0x42, f10: 0x43, f11: 0x44, f12: 0x45,
+    // Misc
+    app: 0x65, menu: 0x65,
+};
+
+function listKeys()
+{
+    console.log("Modifier keys (can be combined with regular keys):");
+    console.log("  ctrl lctrl  shift lshift  alt lalt  gui win cmd lgui lwin");
+    console.log("  rctrl  rshift  ralt altgr  rgui rwin\n");
+    console.log("Regular keys:");
+    console.log("  a-z  0-9  f1-f12");
+    console.log("  enter return  esc escape  backspace bksp  tab  space");
+    console.log("  insert ins  delete del  home  end  pageup pgup  pagedown pgdn");
+    console.log("  up  down  left  right");
+    console.log("  capslock  scrolllock  numlock  printscreen prtscr  pause");
+    console.log("  minus  equals  lbracket  rbracket  backslash");
+    console.log("  semicolon  apostrophe  grave  comma  period  slash");
+    console.log("  app menu\n");
+    console.log("Prefix a key name with ! to release it.  e.g: ctrl c !c !ctrl");
+}
+
+function lookupKey(name)
+{
+    const mod = modifierBits[name];
+    if (mod !== undefined)
+        return { type: "modifier", value: mod };
+    const kc = keyNames[name];
+    if (kc !== undefined)
+        return { type: "key", value: kc };
+    return null;
+}
+
+async function bleKeys(host, port, tokens, delayMs)
+{
+    // Validate all tokens up front
+    for (const token of tokens)
+    {
+        const name = (token.startsWith("!") ? token.slice(1) : token).toLowerCase();
+        if (!lookupKey(name))
+        {
+            console.error(`Error: unknown key name "${name}" (use --list-keys to see available keys)`);
+            process.exit(1);
+        }
+    }
+
+    let modifiers = 0;
+    let activeKeys = [];  // active HID keycodes
+
+    const device = new IrtxDevice(host, port);
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+    function buildReport()
+    {
+        const report = [modifiers, 0x00, 0, 0, 0, 0, 0, 0];
+        for (let i = 0; i < Math.min(activeKeys.length, 6); i++)
+            report[2 + i] = activeKeys[i];
+        return report;
+    }
+
+    try
+    {
+        let first = true;
+        for (const token of tokens)
+        {
+            const release = token.startsWith("!");
+            const key = lookupKey((release ? token.slice(1) : token).toLowerCase());
+
+            if (!first)
+                await sleep(delayMs);
+            first = false;
+
+            if (key.type === "modifier")
+            {
+                if (release)
+                    modifiers &= ~key.value;
+                else
+                    modifiers |= key.value;
+            }
+            else
+            {
+                if (release)
+                    activeKeys = activeKeys.filter(k => k !== key.value);
+                else if (!activeKeys.includes(key.value))
+                    activeKeys.push(key.value);
+            }
+
+            await device.bleSendHid(0xFF, 1, buildReport());
+        }
+
+        // Auto-release any still-held keys
+        if (modifiers !== 0 || activeKeys.length > 0)
+        {
+            await sleep(delayMs);
+            await device.bleSendHid(0xFF, 1, [0, 0, 0, 0, 0, 0, 0, 0]);
         }
     }
     finally
