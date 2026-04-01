@@ -18,8 +18,11 @@ function showHelp()
     console.log("Usage: irtx [options] <command> [args]\n");
     console.log("Commands:");
     showArgs({
-        "send <code>":       "Send an IR code (e.g. NEC:0x20DF10EF)",
-        "configure <file>":  "Pack a .js or .json activities config file and upload to device (or write .bin if no --host)",
+        "send <code>":                  "Send an IR code (e.g. NEC:0x20DF10EF)",
+        "configure <file>":             "Pack a .js or .json activities config file and upload to device (or write .bin if no --host)",
+        "ble-connect <slot>":           "Connect BLE slot by index",
+        "ble-disconnect":               "Disconnect all BLE slots",
+        "ble-hid <reportId> <data>":    "Send BLE HID report (reportId: 1=keyboard 2=consumer 3=mouse, data: hex digits, optional commas)",
     });
     console.log("\nOptions:");
     showArgs({
@@ -114,6 +117,94 @@ switch (command)
             process.exit(1);
         }
         await configure(host, commandArgs[0]);
+        break;
+    }
+
+    case "ble-connect":
+    {
+        if (!host)
+        {
+            console.error("Error: --host is required (or set the IRTX_HOST environment variable)");
+            process.exit(1);
+        }
+        if (commandArgs.length === 0)
+        {
+            console.error("Usage: irtx ble-connect <slot>");
+            process.exit(1);
+        }
+        const slot = parseInt(commandArgs[0], 10);
+        if (isNaN(slot) || slot < 0)
+        {
+            console.error("Error: slot must be a non-negative integer");
+            process.exit(1);
+        }
+        const device = new IrtxDevice(host, port);
+        try
+        {
+            await device.bleConnect(slot);
+        }
+        finally
+        {
+            device.close();
+        }
+        break;
+    }
+
+    case "ble-disconnect":
+    {
+        if (!host)
+        {
+            console.error("Error: --host is required (or set the IRTX_HOST environment variable)");
+            process.exit(1);
+        }
+        const device = new IrtxDevice(host, port);
+        try
+        {
+            await device.bleConnect(-1);
+        }
+        finally
+        {
+            device.close();
+        }
+        break;
+    }
+
+    case "ble-hid":
+    {
+        if (!host)
+        {
+            console.error("Error: --host is required (or set the IRTX_HOST environment variable)");
+            process.exit(1);
+        }
+        if (commandArgs.length < 2)
+        {
+            console.error("Usage: irtx ble-hid <reportId> <hexdata>");
+            process.exit(1);
+        }
+        const reportId = parseInt(commandArgs[0], 10);
+        if (isNaN(reportId) || reportId < 1 || reportId > 255)
+        {
+            console.error("Error: reportId must be an integer between 1 and 255");
+            process.exit(1);
+        }
+        const hexStr = commandArgs[1].replace(/,/g, "");
+        if (!/^[0-9a-fA-F]*$/.test(hexStr) || hexStr.length % 2 !== 0)
+        {
+            console.error("Error: hex data must be an even number of hex digits (optional commas allowed)");
+            process.exit(1);
+        }
+        const reportData = [];
+        for (let i = 0; i < hexStr.length; i += 2)
+            reportData.push(parseInt(hexStr.slice(i, i + 2), 16));
+        const device = new IrtxDevice(host, port);
+        try
+        {
+            await device.bleSendHid(0xFF, reportId, reportData);
+        }
+        finally
+        {
+            device.close();
+        }
         break;
     }
 
