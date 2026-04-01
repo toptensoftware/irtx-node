@@ -239,7 +239,7 @@ irtx --host <ip> ble-disconnect
 ### `ble-hid`
 
 Sends one or more raw BLE HID reports. Each argument after the report ID is a
-separate packet sent with a 30ms delay between them. Use `-` as an argument to
+separate packet sent with a 30ms delay between them. Use `!` as an argument to
 introduce a delay without sending a packet.
 
 ```bash
@@ -255,7 +255,7 @@ Hex data is a string of hex digits with optional commas (e.g. `0102FF` or `01,02
 irtx --host 192.168.1.100 ble-hid 2 E900 0000
 
 # Extra delay between press and release
-irtx --host 192.168.1.100 ble-hid 2 E900 - 0000
+irtx --host 192.168.1.100 ble-hid 2 E900 ! 0000
 
 # Override inter-packet delay to 100ms
 irtx --host 192.168.1.100 --delay 100 ble-hid 2 E900 0000
