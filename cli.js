@@ -11,15 +11,13 @@ import { IrtxDevice } from "./irtx.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const IRTX_BINPACK_URL = "https://raw.githubusercontent.com/toptensoftware/irtx/main/binpack.js";
-
 function showHelp()
 {
     console.log("Usage: irtx [options] <command> [args]\n");
     console.log("Commands:");
     showArgs({
         "send <code>":                  "Send an IR code (e.g. NEC:0x20DF10EF)",
-        "configure <file>":             "Pack a .js or .json activities config file and upload to device (or write .bin if no --host)",
+        "activities <file>":            "Pack a .js or .json activities config file, write .bin, and upload to device",
         "ble-connect <slot>":           "Connect BLE slot by index",
         "ble-disconnect":               "Disconnect all BLE slots",
         "ble-hid <reportId> <data...>":  "Send one or more BLE HID reports (reportId: 1=keyboard 2=consumer 3=mouse, data: hex digits, optional commas)",
@@ -123,11 +121,16 @@ switch (command)
         break;
     }
 
-    case "configure":
+    case "activities":
     {
+        if (!host)
+        {
+            console.error("Error: --host is required (or set the IRTX_HOST environment variable)");
+            process.exit(1);
+        }
         if (commandArgs.length === 0)
         {
-            console.error("Usage: irtx configure <file.js|file.json>");
+            console.error("Usage: irtx activities <file.js|file.json>");
             process.exit(1);
         }
         await configure(host, commandArgs[0]);
@@ -533,8 +536,8 @@ async function bleKeys(host, port, tokens, delayMs)
 
 async function configure(host, dataFile)
 {
-    // Fetch type definitions from irtx repo
-    const typeDefsResponse = await fetch(IRTX_BINPACK_URL);
+    // Fetch type definitions from device
+    const typeDefsResponse = await fetch(`http://${host}/binpack.js`);
     if (!typeDefsResponse.ok)
         throw new Error(`Failed to fetch type definitions: ${typeDefsResponse.status} ${typeDefsResponse.statusText}`);
     const typeDefsSource = await typeDefsResponse.text();
@@ -567,27 +570,23 @@ async function configure(host, dataFile)
     const packResult = pack(rootType, data);
     const buffer = buildCombinedBuffer(packResult);
 
-    if (host)
-    {
-        // POST to device as multipart upload (matches Arduino WebServer upload handler)
-        const form = new FormData();
-        form.append("file", new Blob([buffer], { type: "application/octet-stream" }), "activities.bin");
+    // Always write the .bin file
+    const outFile = path.join(path.dirname(path.resolve(dataFile)),
+                              path.basename(dataFile, path.extname(dataFile)) + ".bin");
+    fs.writeFileSync(outFile, buffer);
+    console.log(`Written: ${outFile} (${buffer.length} bytes)`);
 
-        const postResponse = await fetch(`http://${host}/api/activities`, {
-            method: "POST",
-            body: form,
-        });
+    // POST to device as multipart upload (matches Arduino WebServer upload handler)
+    const form = new FormData();
+    form.append("file", new Blob([buffer], { type: "application/octet-stream" }), "activities.bin");
 
-        if (!postResponse.ok)
-            throw new Error(`Upload failed: ${postResponse.status} ${postResponse.statusText}`);
+    const postResponse = await fetch(`http://${host}/api/activities`, {
+        method: "POST",
+        body: form,
+    });
 
-        console.log(`Configured: ${buffer.length} bytes uploaded to ${host}`);
-    }
-    else
-    {
-        const outFile = path.join(path.dirname(path.resolve(dataFile)),
-                                  path.basename(dataFile, path.extname(dataFile)) + ".bin");
-        fs.writeFileSync(outFile, buffer);
-        console.log(`Written: ${outFile} (${buffer.length} bytes)`);
-    }
+    if (!postResponse.ok)
+        throw new Error(`Upload failed: ${postResponse.status} ${postResponse.statusText}`);
+
+    console.log(`Uploaded: ${buffer.length} bytes to ${host}`);
 }

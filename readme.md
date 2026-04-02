@@ -167,24 +167,24 @@ irtx --host <ip> send <PROTOCOL:CODE>
 irtx --host 192.168.1.100 send NEC:0x20DF10EF
 ```
 
-### `configure`
+### `activities`
 
-Packs an activities configuration file and uploads it to the device:
-
-```bash
-irtx --host <ip> configure <file.js|file.json>
-```
-
-If `--host` is omitted, the packed binary is written to `<file>.bin` in the
-same directory as the input file instead of being uploaded.
+Packs an activities configuration file, writes the packed binary to `<file>.bin`
+in the same directory as the input file, and uploads it to the device:
 
 ```bash
-# Upload directly to device
-irtx --host 192.168.1.100 configure activities.js
-
-# Pack to activities.bin without uploading
-irtx configure activities.js
+irtx --host <ip> activities <file.js|file.json>
 ```
+
+`--host` is required. The type definitions (`binpack.js`) are fetched directly
+from the target device, so the packed output always matches the connected
+firmware's schema.
+
+```bash
+irtx --host 192.168.1.100 activities activities.js
+```
+
+This writes `activities.bin` alongside the source file and uploads it to the device.
 
 The configuration file is a `.js` or `.json` file that exports the activities
 data as its default export. `.js` files can import helpers from `binpack:types`:
@@ -216,9 +216,7 @@ export default {
 ```
 
 The `binpack:types` specifier is provided at runtime by the CLI — no separate
-install is needed. The type definitions are fetched fresh from the
-[irtx](https://github.com/toptensoftware/irtx) repo each time `configure` runs,
-so the packed output always matches the current firmware schema.
+install is needed.
 
 ### `ble-connect`
 
