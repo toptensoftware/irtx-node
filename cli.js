@@ -573,7 +573,7 @@ async function configure(host, dataFile)
         const form = new FormData();
         form.append("file", new Blob([buffer], { type: "application/octet-stream" }), "activities.bin");
 
-        const postResponse = await fetch(`http://${host}/activities`, {
+        const postResponse = await fetch(`http://${host}/api/activities`, {
             method: "POST",
             body: form,
         });

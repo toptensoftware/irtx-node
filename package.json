@@ -1,7 +1,7 @@
 {
   "name": "@toptensoftware/irtx-node",
   "description": "Node library for irtx",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "main": "irtx.js",
   "bin": {
     "irtx": "cli.js"
