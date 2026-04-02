@@ -534,6 +534,19 @@ async function bleKeys(host, port, tokens, delayMs)
 
 // ---------------------------------------------------------------------------
 
+async function uploadFile(host, data, filename, mimeType = "application/octet-stream")
+{
+    const form = new FormData();
+    form.append("file", new Blob([data], { type: mimeType }), filename);
+    const r = await fetch(`http://${host}/api/upload?filename=${encodeURIComponent(filename)}`, {
+        method: "POST",
+        body: form,
+    });
+    if (!r.ok)
+        throw new Error(`Upload of ${filename} failed: ${r.status} ${r.statusText}`);
+    console.log(`Uploaded: ${filename} (${data.length} bytes)`);
+}
+
 async function configure(host, dataFile)
 {
     // Fetch type definitions from device
@@ -570,23 +583,18 @@ async function configure(host, dataFile)
     const packResult = pack(rootType, data);
     const buffer = buildCombinedBuffer(packResult);
 
-    // Always write the .bin file
+    // Always write the .bin file locally
     const outFile = path.join(path.dirname(path.resolve(dataFile)),
                               path.basename(dataFile, path.extname(dataFile)) + ".bin");
     fs.writeFileSync(outFile, buffer);
     console.log(`Written: ${outFile} (${buffer.length} bytes)`);
 
-    // POST to device as multipart upload (matches Arduino WebServer upload handler)
-    const form = new FormData();
-    form.append("file", new Blob([buffer], { type: "application/octet-stream" }), "activities.bin");
+    // Upload binary and source, then trigger reload
+    await uploadFile(host, buffer, "activities.bin");
+    await uploadFile(host, fs.readFileSync(dataFile), "activities.js", "application/javascript");
 
-    const postResponse = await fetch(`http://${host}/api/activities`, {
-        method: "POST",
-        body: form,
-    });
-
-    if (!postResponse.ok)
-        throw new Error(`Upload failed: ${postResponse.status} ${postResponse.statusText}`);
-
-    console.log(`Uploaded: ${buffer.length} bytes to ${host}`);
+    const reloadResponse = await fetch(`http://${host}/api/reload-activities`, { method: "POST" });
+    if (!reloadResponse.ok)
+        throw new Error(`Reload failed: ${reloadResponse.status} ${reloadResponse.statusText}`);
+    console.log("Activities reloaded.");
 }
